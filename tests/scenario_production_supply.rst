@@ -23,6 +23,10 @@ Create product::
     >>> ProductUom = Model.get('product.uom')
     >>> unit, = ProductUom.find([('name', '=', 'Unit')])
     >>> ProductTemplate = Model.get('product.template')
+    >>> BOM = Model.get('production.bom')
+    >>> BOMInput = Model.get('production.bom.input')
+    >>> BOMOutput = Model.get('production.bom.output')
+    >>> ProductBom = Model.get('product.product-production.bom')
 
     >>> template = ProductTemplate()
     >>> template.name = 'product'
@@ -52,18 +56,26 @@ Create components::
     >>> template2.name = 'component 2'
     >>> template2.default_uom = unit
     >>> template2.type = 'goods'
-    >>> template2.purchasable = True
+    >>> template2.producible = True
     >>> template2.list_price = Decimal(7)
     >>> component2, = template2.products
     >>> component2.cost_price = Decimal(5)
     >>> template2.save()
     >>> component2, = template2.products
 
-Create Bill of Material::
+Create BOM for producible component::
 
-    >>> BOM = Model.get('production.bom')
-    >>> BOMInput = Model.get('production.bom.input')
-    >>> BOMOutput = Model.get('production.bom.output')
+    >>> component2_bom = BOM(name='component 2')
+    >>> component2_output = BOMOutput()
+    >>> component2_bom.outputs.append(component2_output)
+    >>> component2_output.product = component2
+    >>> component2_output.quantity = 1
+    >>> component2_bom.save()
+
+    >>> component2.boms.append(ProductBom(bom=component2_bom))
+    >>> component2.save()
+
+Create Bill of Material::
     >>> bom = BOM(name='product')
     >>> input1 = BOMInput()
     >>> bom.inputs.append(input1)
@@ -83,7 +95,6 @@ Create Bill of Material::
     >>> output.quantity = 1
     >>> bom.save()
 
-    >>> ProductBom = Model.get('product.product-production.bom')
     >>> product.boms.append(ProductBom(bom=bom))
     >>> product.save()
 
@@ -106,12 +117,26 @@ Purchase requests are created per product and linked to all input moves::
     >>> PurchaseRequest = Model.get('purchase.request')
     >>> requests = PurchaseRequest.find([('origin', '=', str(production))])
     >>> len(requests)
-    2
+    1
     >>> sorted((r.product.name, r.quantity) for r in requests)
-    [('component 1', 14.0), ('component 2', 6.0)]
+    [('component 1', 14.0)]
     >>> component1_moves = [m for m in production.inputs if m.product == component1]
     >>> len({m.purchase_request.id for m in component1_moves})
     1
     >>> for move in production.inputs:
-    ...     assertEqual(move.purchase_request.origin.id, production.id)
-    ...     assertEqual(str(move.purchase_request.origin), str(production))
+    ...     if move.product == component1:
+    ...         assertEqual(move.purchase_request.origin.id, production.id)
+    ...         assertEqual(str(move.purchase_request.origin), str(production))
+    ...     else:
+    ...         assertEqual(move.purchase_request, None)
+
+Productions are created for producible products::
+
+    >>> child_productions = Production.find([('origin', '=', str(production))])
+    >>> len(child_productions)
+    1
+    >>> child_production, = child_productions
+    >>> child_production.product == component2
+    True
+    >>> child_production.quantity
+    6.0
