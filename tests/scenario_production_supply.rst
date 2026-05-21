@@ -52,6 +52,17 @@ Create components::
     >>> template1.save()
     >>> component1, = template1.products
 
+Define a product supplier for the purchasable component::
+
+    >>> Party = Model.get('party.party')
+    >>> supplier = Party(name='Supplier')
+    >>> supplier.save()
+    >>> ProductSupplier = Model.get('purchase.product_supplier')
+    >>> product_supplier = ProductSupplier(template=template1)
+    >>> product_supplier.party = supplier
+    >>> product_supplier.lead_time = dt.timedelta(days=1)
+    >>> product_supplier.save()
+
     >>> template2 = ProductTemplate()
     >>> template2.name = 'component 2'
     >>> template2.default_uom = unit
@@ -120,6 +131,9 @@ Purchase requests are created per product and linked to all input moves::
     1
     >>> sorted((r.product.name, r.quantity) for r in requests)
     [('component 1', 14.0)]
+    >>> request, = requests
+    >>> request.party == supplier
+    True
     >>> component1_moves = [m for m in production.inputs if m.product == component1]
     >>> len({m.purchase_request.id for m in component1_moves})
     1

@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import datetime
 from collections import defaultdict
 
 from trytond.pool import Pool, PoolMeta
@@ -41,6 +42,32 @@ class Production(metaclass=PoolMeta):
 
     def must_supply_on_production(self, product):
         return True
+
+    def _get_purchase_request_product_supplier_pattern(self):
+        return {
+            'company': self.company.id,
+            }
+
+    def get_purchase_request_supplier(self, product, supply_date):
+        pool = Pool()
+        Request = pool.get('purchase.request')
+
+        pattern = self._get_purchase_request_product_supplier_pattern()
+        supplier, purchase_date = Request.find_best_supplier(
+            product, supply_date, **pattern)
+        if supplier:
+            return supplier, purchase_date, supply_date
+
+        product_supplier = Request.find_best_product_supplier(
+            product, None, **pattern)
+        if product_supplier:
+            supplier = product_supplier.party
+            purchase_date = product_supplier.compute_purchase_date(None)
+            supplier_supply_date = product_supplier.compute_supply_date(
+                purchase_date)
+            if supplier_supply_date != datetime.date.max:
+                supply_date = supplier_supply_date
+        return supplier, purchase_date, supply_date
 
     def get_purchase_requests(self):
         requests = []
@@ -110,11 +137,11 @@ class Production(metaclass=PoolMeta):
             move_supply_date = move.planned_date or self.planned_start_date
             if supply_date is None or move_supply_date < supply_date:
                 supply_date = move_supply_date
-        supplier, purchase_date = Request.find_best_supplier(
-            product, supply_date, company=self.company.id)
+        supplier, purchase_date, supply_date = (
+            self.get_purchase_request_supplier(product, supply_date))
         return Request(
             product=product,
-            party=supplier,
+            party=supplier and supplier or None,
             quantity=quantity,
             unit=unit,
             computed_quantity=quantity,
