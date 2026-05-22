@@ -3,7 +3,11 @@
 import datetime
 from collections import defaultdict
 
+from trytond.i18n import gettext
+from trytond.model import ModelView, Workflow
 from trytond.pool import Pool, PoolMeta
+
+from .exceptions import SupplyWarning
 
 
 class Production(metaclass=PoolMeta):
@@ -17,6 +21,71 @@ class Production(metaclass=PoolMeta):
     def wait(cls, productions):
         super().wait(productions)
         cls._process_supply(productions)
+
+    @classmethod
+    def _check_supply_documents(cls, productions, transition):
+        pool = Pool()
+        PurchaseRequest = pool.get('purchase.request')
+        Production = pool.get('production')
+        Warning = pool.get('res.user.warning')
+
+        origins = [str(p) for p in productions]
+        purchase_requests = PurchaseRequest.search([
+                ('origin', 'in', origins),
+                ])
+        child_productions = Production.search([
+                ('origin', 'in', origins),
+                ])
+        purchase_requests_in_progress = [
+            r for r in purchase_requests
+            if r.state not in {'draft', 'cancelled'}]
+        child_productions_in_progress = [
+            p for p in child_productions
+            if p.state not in {'draft', 'cancelled'}]
+
+        if purchase_requests_in_progress or child_productions_in_progress:
+            key = Warning.format(
+                'production_supply_documents_%s' % transition, productions)
+            if Warning.check(key):
+                raise SupplyWarning(key, gettext(
+                        'production_supply.'
+                        'msg_supply_documents_in_progress'))
+        return purchase_requests, child_productions
+
+    @classmethod
+    def _clean_supply_documents(cls, purchase_requests, child_productions):
+        pool = Pool()
+        PurchaseRequest = pool.get('purchase.request')
+        Production = pool.get('production')
+
+        purchase_requests_to_delete = [
+            r for r in purchase_requests
+            if r.state == 'draft']
+        child_productions_to_delete = [
+            p for p in child_productions
+            if p.state == 'draft']
+        if purchase_requests_to_delete:
+            PurchaseRequest.delete(purchase_requests_to_delete)
+        if child_productions_to_delete:
+            Production.delete(child_productions_to_delete)
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('cancelled')
+    def cancel(cls, productions):
+        purchase_requests, child_productions = cls._check_supply_documents(
+            productions, 'cancel')
+        cls._clean_supply_documents(purchase_requests, child_productions)
+        super().cancel(productions)
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('draft')
+    def draft(cls, productions):
+        purchase_requests, child_productions = cls._check_supply_documents(
+            productions, 'draft')
+        cls._clean_supply_documents(purchase_requests, child_productions)
+        super().draft(productions)
 
     @classmethod
     def _process_supply(cls, productions):
