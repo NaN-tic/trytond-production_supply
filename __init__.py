@@ -3,11 +3,14 @@
 
 from trytond.pool import Pool
 
-from . import production, purchase, stock
+from . import product, production, purchase, stock
 
 
 def register():
     Pool.register(
+        product.Template,
+        product.TemplateSupplyOnProduction,
+        product.Product,
         production.Production,
         purchase.Request,
         stock.Move,
