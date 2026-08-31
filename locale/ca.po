@@ -1,0 +1,35 @@
+#
+msgid ""
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "field:product.product,supply_on_production:"
+msgid "Supply On Production"
+msgstr "Proveïment en producció"
+
+msgctxt "field:product.template,supply_on_production:"
+msgid "Supply On Production"
+msgstr "Proveïment en producció"
+
+msgctxt "selection:product.product,supply_on_production:"
+msgid "Only Purchases"
+msgstr "Només compres"
+
+msgctxt "selection:product.product,supply_on_production:"
+msgid "Only Stock"
+msgstr "Només estoc"
+
+msgctxt "selection:product.product,supply_on_production:"
+msgid "Stock First"
+msgstr "Primer estoc"
+
+msgctxt "selection:product.template,supply_on_production:"
+msgid "Only Purchases"
+msgstr "Només compres"
+
+msgctxt "selection:product.template,supply_on_production:"
+msgid "Only Stock"
+msgstr "Només estoc"
+
+msgctxt "selection:product.template,supply_on_production:"
+msgid "Stock First"
+msgstr "Primer estoc"
