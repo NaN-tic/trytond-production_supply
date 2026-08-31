@@ -4,8 +4,9 @@ import datetime
 from collections import defaultdict
 
 from trytond.i18n import gettext
-from trytond.model import ModelView, Workflow
+from trytond.model import ModelView, Workflow, dualmethod
 from trytond.pool import Pool, PoolMeta
+from trytond.transaction import Transaction
 
 from .exceptions import SupplyWarning
 
@@ -21,6 +22,37 @@ class Production(metaclass=PoolMeta):
     def wait(cls, productions):
         super().wait(productions)
         cls._process_supply(productions)
+
+    @dualmethod
+    @ModelView.button
+    def assign_try(cls, productions):
+        super().assign_try(productions)
+        productions = cls.browse([p.id for p in productions])
+        cls._process_stock_first_supply(productions)
+
+    @classmethod
+    def _process_stock_first_supply(cls, productions):
+        pool = Pool()
+        PurchaseRequest = pool.get('purchase.request')
+
+        requests = {
+            move.purchase_request
+            for production in productions
+            for move in production.inputs
+            if (move.purchase_request
+                and move.purchase_request.state == 'draft'
+                and move.purchase_request.origin == production
+                and move.product.supply_on_production == 'stock_first')
+            }
+        if requests:
+            PurchaseRequest.delete(list(requests))
+        if any(
+                move.product
+                and move.product.supply_on_production == 'stock_first'
+                for production in productions for move in production.inputs):
+            with Transaction().set_context(
+                    _supply_on_production_after_assign=True):
+                cls._process_supply(productions)
 
     @classmethod
     def _check_supply_documents(cls, productions, transition):
@@ -112,6 +144,14 @@ class Production(metaclass=PoolMeta):
     def must_supply_on_production(self, product):
         return True
 
+    def must_purchase_on_production(self, product):
+        supply_on_production = product.supply_on_production
+        return (
+            supply_on_production == 'always'
+            or (supply_on_production == 'stock_first'
+                and Transaction().context.get(
+                    '_supply_on_production_after_assign')))
+
     def _get_purchase_request_product_supplier_pattern(self):
         return {
             'company': self.company.id,
@@ -148,8 +188,11 @@ class Production(metaclass=PoolMeta):
                     or not move.product
                     or move.quantity <= 0):
                 continue
+            if (Transaction().context.get('_supply_on_production_after_assign')
+                    and move.state not in {'draft', 'staging'}):
+                continue
             if (move.product.producible
-                    or not self.must_supply_on_production(move.product)
+                    or not self.must_purchase_on_production(move.product)
                     or not move.product.purchasable):
                 continue
             moves_per_product[move.product].append(move)
