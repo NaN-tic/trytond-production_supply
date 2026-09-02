@@ -15,3 +15,7 @@ def register():
         purchase.Request,
         stock.Move,
         module='production_supply', type_='model')
+    Pool.register(
+        purchase.RequestStockSupply,
+        module='production_supply', type_='model',
+        depends=['stock_supply'])
