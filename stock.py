@@ -10,7 +10,7 @@ class Move(metaclass=PoolMeta):
 
     purchase_request = fields.Many2One(
         'purchase.request', "Purchase Request",
-        ondelete='SET NULL', readonly=True)
+        ondelete='SET NULL', states={'editable': False})
     supply_state = fields.Function(fields.Selection([
                 ('', ""),
                 ('requested', "Requested"),
